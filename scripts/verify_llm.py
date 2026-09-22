@@ -28,11 +28,11 @@ ENV_PATH = PROJECT_ROOT / ".env"
 #: Candidates in preference order: strong instruction-following, cheap,
 #: and known to honour guided JSON on NIM. The first that passes the probe wins.
 PREFERRED = (
+    "openai/gpt-oss-20b",
     "nvidia/llama-3.1-nemotron-70b-instruct",
     "nvidia/llama-3.1-nemotron-ultra-253b-v1",
     "mistralai/mistral-large-2-instruct",
-    "mistralai/mixtral-8x22b-v0.1",
-    "openai/gpt-oss-20b",
+    "moonshotai/kimi-k2.6",
 )
 
 
@@ -77,12 +77,9 @@ def catalogue(base_url: str, key: str) -> list[str]:
     return sorted(i for i in ids if i)
 
 
-def pick(catalogue_ids: list[str]) -> str | None:
-    for preferred in PREFERRED:
-        for cid in catalogue_ids:
-            if preferred in cid:
-                return cid
-    return None
+def pick(catalogue_ids: list[str]) -> list[str]:
+    """Catalogue ids matching a preferred slug, in preference order."""
+    return [cid for preferred in PREFERRED for cid in catalogue_ids if preferred in cid]
 
 
 def probe(settings: Settings) -> str:
@@ -147,22 +144,30 @@ def main() -> int:
         print("FAIL: empty catalogue")
         return 1
 
-    slug = pick(ids)
-    if slug is None:
+    candidates = pick(ids)
+    if not candidates:
         print("FAIL: no preferred model found in catalogue; extend PREFERRED")
         return 1
-    print(f"chosen: {slug}")
 
-    settings = type(settings)(
-        **{
-            **{f: getattr(settings, f) for f in settings.__dataclass_fields__},
-            "llm_model": slug,
-        }
-    )
-    try:
-        evidence = probe(settings)
-    except Exception as exc:
-        print(f"FAIL: live probe failed for {slug}: {exc}")
+    evidence = ""
+    slug = None
+    for candidate in candidates:
+        print(f"probing: {candidate}")
+        trial = type(settings)(
+            **{
+                **{f: getattr(settings, f) for f in settings.__dataclass_fields__},
+                "llm_model": candidate,
+            }
+        )
+        try:
+            evidence = probe(trial)
+        except Exception as exc:
+            print(f"  probe failed: {str(exc)[:140]}")
+            continue
+        slug = candidate
+        break
+    if slug is None:
+        print("FAIL: every candidate failed the live probe")
         return 1
     print(f"probe ok -> {evidence}")
 
