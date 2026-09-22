@@ -1,0 +1,38 @@
+[project]
+name = "research-landscape-api"
+version = "0.2.0"
+description = "AI Research Landscape Agent V2 — arXiv retrieval, enrichment, reranking, extraction, layout, synthesis."
+requires-python = ">=3.11"
+
+# Mirror of the repo-root pyproject.toml so that `cd api && pytest|mypy` behaves
+# identically to running from the root. Keep the two in sync.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Let tests import the api modules by bare name (config, store, models, ...).
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+markers = [
+    "live: requires network access to arXiv/S2/OpenAlex and/or a real LLM key (deselected by default; opt in with RUN_LIVE_TESTS=1 and -m live)",
+]
+# Offline by default. Live tests must opt in explicitly:
+#   RUN_LIVE_TESTS=1 python -m pytest -m live
+addopts = "-q -m 'not live'"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+exclude = [".venv", "data", "__pycache__"]
+
+[tool.ruff.lint]
+# Bug-level rules only, matching the V1 convention.
+select = ["E4", "E7", "E9", "F", "B", "I"]
+ignore = ["B008"]  # FastAPI dependency injection needs calls in argument defaults
+
+[tool.mypy]
+python_version = "3.11"
+mypy_path = ["."]
+ignore_missing_imports = true
+warn_redundant_casts = true
+no_implicit_optional = true

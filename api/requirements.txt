@@ -1,0 +1,29 @@
+# Runtime
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.0
+python-dotenv==1.0.1
+python-multipart==0.0.20
+httpx==0.28.1
+
+# Retrieval
+# 4.0.x removed Search.results(), Result.download_pdf(), and max_results=math.inf.
+arxiv==4.0.1
+
+# Reranking / embeddings / layout
+sentence-transformers==3.3.1
+scikit-learn==1.6.0
+umap-learn==0.5.7
+# 0.8.44 publishes cp311 arm64 wheels (checked 2026-09-22); do not float this pin.
+hdbscan==0.8.44
+numpy==2.2.1
+
+# LLM (OpenAI-compatible: NVIDIA NIM, OpenRouter, or a local server)
+openai==1.59.3
+
+# Tests / lint
+pytest==8.3.4
+pytest-asyncio==0.25.0
+ruff==0.8.6
+mypy==1.14.1
