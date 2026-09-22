@@ -19,9 +19,8 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "api"))
 
 import httpx  # noqa: E402
-from pydantic import BaseModel, ConfigDict  # noqa: E402
-
 from config import Settings  # noqa: E402
+from pydantic import BaseModel, ConfigDict  # noqa: E402
 
 ENV_PATH = PROJECT_ROOT / ".env"
 
