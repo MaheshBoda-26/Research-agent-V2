@@ -123,7 +123,6 @@ CREATE TABLE IF NOT EXISTS landscape_papers (
   PRIMARY KEY (landscape_id, paper_id)
 );
 CREATE INDEX IF NOT EXISTS idx_landscape_papers_rank ON landscape_papers(landscape_id, rank);
-"""
 
 CREATE TABLE IF NOT EXISTS clusters (
   id INTEGER PRIMARY KEY,
