@@ -46,4 +46,3 @@ data/       gitignored runtime state: landscapes.db, caches, model weights
   layer refuses it.
 - Secrets live only in `.env`; `Settings.describe()` is the only config object
   that may be logged, and it redacts keys.
-# Research-agent-V2
