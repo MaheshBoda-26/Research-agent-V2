@@ -1,0 +1,14 @@
+{
+  "meta": {"count": 1},
+  "results": [
+    {
+      "id": "https://openalex.org/W2963403868",
+      "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "doi": "https://doi.org/10.48550/arxiv.2005.11401",
+      "cited_by_count": 19463,
+      "publication_year": 2020,
+      "ids": {"openalex": "https://openalex.org/W2963403868", "doi": "https://doi.org/10.48550/arxiv.2005.11401"},
+      "referenced_works": ["https://openalex.org/W2100837269", "https://openalex.org/W1538884096"]
+    }
+  ]
+}
