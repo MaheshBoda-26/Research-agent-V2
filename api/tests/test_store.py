@@ -135,7 +135,6 @@ def test_link_paper_membership_and_fetch(conn) -> None:
 
 
 def test_embedding_round_trip(conn) -> None:
-    conn = conn  # noqa: PLW0127 - fixture
     store.upsert_papers(conn, [make_paper("p1"), make_paper("p2")])
     blob = b"\x01\x02\x03\x04" * 4
     store.upsert_embedding(conn, "p1", "BAAI/bge-base-en-v1.5", blob, 4)
@@ -262,4 +261,92 @@ def test_every_output_id_must_reference_a_landscape_paper(conn) -> None:
         (landscape_id,) * 6,
     ).fetchall()
     assert dangling == []
+
+
+
+# --------------------------------------------------------------------------- #
+# Citations / caches / observability
+# --------------------------------------------------------------------------- #
+
+
+def test_citations_replace_and_fetch(conn) -> None:
+    store.upsert_papers(conn, [make_paper(pid) for pid in ("a", "b", "c")])
+    store.replace_citations(conn, "a", [("a", "b"), ("a", "c")], "semanticscholar")
+    store.replace_citations(conn, "b", [("b", "c")], "openalex")
+    triples = store.fetch_citations(conn, ["a", "b"])
+    assert ("a", "b", "semanticscholar") in triples
+    assert ("a", "c", "semanticscholar") in triples
+    assert ("b", "c", "openalex") in triples
+
+    # replace is wholesale per (src, source): refetching S2 drops stale links.
+    store.replace_citations(conn, "a", [("a", "c")], "semanticscholar")
+    triples = store.fetch_citations(conn, ["a"])
+    assert ("a", "b", "semanticscholar") not in triples
+    assert ("b", "c", "openalex") in triples  # other source untouched
+
+
+def test_source_cache_respects_ttl(conn) -> None:
+    store.put_cached(conn, "s2:paper:arXiv:2005.11401", "semanticscholar", {"citations": 42}, 3600)
+    assert store.get_cached(conn, "s2:paper:arXiv:2005.11401", "semanticscholar") == {"citations": 42}
+    # Wrong source namespace misses.
+    assert store.get_cached(conn, "s2:paper:arXiv:2005.11401", "openalex") is None
+    # Zero TTL expires immediately.
+    store.put_cached(conn, "oa:work:W1", "openalex", {"x": 1}, 0)
+    assert store.get_cached(conn, "oa:work:W1", "openalex") is None
+
+
+def test_runs_replay_in_order(conn) -> None:
+    landscape_id = _seed_landscape(conn)
+    store.insert_run(conn, {"run_id": "r1", "landscape_id": landscape_id,
+                            "stage": "retrieval", "status": "running"})
+    store.insert_run(conn, {"run_id": "r1", "landscape_id": landscape_id,
+                            "stage": "retrieval", "status": "done",
+                            "message": "3 papers", "degraded": True,
+                            "payload": {"count": 3}})
+    events = store.fetch_runs(conn, landscape_id)
+    assert [e["status"] for e in events] == ["running", "done"]
+    assert events[1]["degraded"] is True
+    assert events[1]["payload"] == {"count": 3}
+    assert all(e["run_id"] == "r1" for e in events)
+
+
+def test_llm_calls_and_cost_rollup(conn) -> None:
+    landscape_id = _seed_landscape(conn)
+    for stage, cost in (("extraction", 0.001), ("extraction", 0.002), ("synthesis", 0.004)):
+        store.insert_llm_call(
+            conn,
+            {
+                "run_id": "r1", "landscape_id": landscape_id, "stage": stage,
+                "model": "meta/test-model", "provider": "nim",
+                "prompt_tokens": 100, "completion_tokens": 20,
+                "cost_usd": cost, "latency_ms": 800, "attempt": 1, "ok": True,
+            },
+        )
+    store.insert_llm_call(
+        conn,
+        {"run_id": "r1", "stage": "extraction", "model": "meta/test-model",
+         "provider": "nim", "ok": False, "validation_error": "missing field: problem"},
+    )
+    rollup = store.llm_cost_rollup(conn, days=30)
+    extraction = next(r for r in rollup if r["stage"] == "extraction")
+    assert extraction["calls"] == 3
+    assert extraction["prompt_tokens"] == 200
+    assert extraction["cost_usd"] == pytest.approx(0.003)
+    synthesis = next(r for r in rollup if r["stage"] == "synthesis")
+    assert synthesis["cost_usd"] == pytest.approx(0.004)
+
+
+def test_prune_deletes_expired_cache_and_old_runs(conn) -> None:
+    landscape_id = _seed_landscape(conn)
+    store.put_cached(conn, "old", "openalex", {"x": 1}, 0)  # already expired
+    store.put_cached(conn, "fresh", "openalex", {"x": 2}, 3600)
+    store.insert_run(conn, {"run_id": "old", "landscape_id": landscape_id,
+                            "stage": "retrieval", "status": "done",
+                            "created_at": "2020-01-01T00:00:00Z"})
+    store.insert_run(conn, {"run_id": "new", "landscape_id": landscape_id,
+                            "stage": "retrieval", "status": "done"})
+    counts = store.prune(conn, older_than_days=90)
+    assert counts == {"source_cache": 1, "runs": 1}
+    assert store.get_cached(conn, "fresh", "openalex") == {"x": 2}
+    assert [e["run_id"] for e in store.fetch_runs(conn, landscape_id)] == ["new"]
 
