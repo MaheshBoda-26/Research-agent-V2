@@ -104,13 +104,25 @@ def test_embeddings_are_scoped_by_model(settings: Settings, conn):
 
 
 def test_dim_mismatch_names_both_dims(settings: Settings, conn):
-    """Swapping embedders under a warm cache fails loudly, not silently."""
-    papers = [make_paper(paper_id="p1")]
-    store.upsert_papers(conn, papers)
-    embed_papers(papers, settings, conn, embedder=FakeEmbedder(dim=8))
+    """Swapping embedders under a warm cache fails loudly, not silently.
+
+    The check fires when a fresh encode coexists with cached rows: the new
+    paper's dim-4 vector would otherwise sit beside dim-8 vectors under the
+    same model name, making every later cosine meaningless.
+    """
+    store.upsert_papers(conn, [make_paper(paper_id="p1"), make_paper(paper_id="p2")])
+    embed_papers([make_paper(paper_id="p1")], settings, conn, embedder=FakeEmbedder(dim=8))
 
     with pytest.raises(ValueError, match="cached dim 8.*freshly encoded dim 4"):
-        embed_papers(papers, settings, conn, embedder=FakeEmbedder(dim=4))
+        embed_papers(
+            [make_paper(paper_id="p1"), make_paper(paper_id="p2")],
+            settings,
+            conn,
+            embedder=FakeEmbedder(dim=4),
+        )
+    # The store must be untouched: no misaligned vector was persisted.
+    cached = store.fetch_embeddings(conn, ["p1", "p2"], "fake-embed")
+    assert set(cached) == {"p1"}
 
 
 def test_dim_check_against_raw_blobs():

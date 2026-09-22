@@ -27,13 +27,17 @@ from __future__ import annotations
 
 import logging
 import math
+import re
+from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 import numpy as np
 
 from config import Settings
-from models import UNCLUSTERED_LABEL
+from llm.protocol import JSONCompleter
+from models import UNCLUSTERED_LABEL, ClusterLabel, ClusterNaming, Paper
+from prompts.cluster import CLUSTER_LABEL_SYSTEM_PROMPT, build_cluster_naming_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +203,7 @@ def normalize_coords(coords: np.ndarray) -> np.ndarray:
     span = np.abs(centered).max()
     if span <= 0:
         return np.zeros_like(coords)
+    return (centered / span).astype(np.float32)
 
 
 #: Distinguishable palette for cluster coloring, assigned in label order.
@@ -225,6 +230,41 @@ def color_for_label(label: int) -> str:
     if label == UNCLUSTERED_LABEL:
         return UNCLUSTERED_COLOR
     return CLUSTER_COLORS[label % len(CLUSTER_COLORS)]
+
+
+def fit_frame_alignment(
+    reference: np.ndarray,
+    moving: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Fit the rigid transform mapping ``moving`` onto ``reference`` row-by-row.
+
+    UMAP's coordinate frame is deterministic for *identical* input but rotates
+    and reflects freely between runs on different input (50 vs 60 points), so
+    raw centroids from two generations are not comparable — matching them
+    directly maps cluster 0 onto cluster 1. The standard orthogonal-Procrustes
+    solution fits rotation + translation on the papers shared by both
+    generations; the caller then applies it to the new frame before centroid
+    matching. Both inputs must be row-aligned ``(n, 2)`` with n >= 2.
+    """
+    if reference.shape != moving.shape or reference.shape[0] < 2 or reference.shape[1] != 2:
+        raise ValueError(
+            f"frame alignment needs matching (n>=2, 2) arrays, got "
+            f"{reference.shape} and {moving.shape}"
+        )
+    ref_center = reference.mean(axis=0)
+    mov_center = moving.mean(axis=0)
+    u, _, vt = np.linalg.svd((moving - mov_center).T @ (reference - ref_center))
+    rotation = u @ vt
+    offset = ref_center - mov_center @ rotation
+    return rotation, offset
+
+
+def apply_frame_alignment(
+    coords: np.ndarray, alignment: tuple[np.ndarray, np.ndarray]
+) -> np.ndarray:
+    """Apply a ``(rotation, offset)`` pair from :func:`fit_frame_alignment`."""
+    rotation, offset = alignment
+    return coords @ rotation + offset
 
 
 def match_labels_by_centroid(
@@ -266,20 +306,267 @@ def match_labels_by_centroid(
     return remap
 
 
+def cluster(matrix: np.ndarray, settings: Settings) -> tuple[np.ndarray, dict]:
+    """A.9 contract: labels plus the parameters that actually produced them.
+
+    ``matrix`` is the 2D projection — the deliberate clustering input documented
+    in the module docstring. The returned dict records the parameters so a run
+    can be reproduced from its log alone.
+    """
+    labels = cluster_labels(matrix, settings)
+    params = {
+        "min_cluster_size": min_cluster_size(int(matrix.shape[0]), settings),
+        "min_samples": 2,
+        "clustered_on": "2d_projection",
+    }
+    return labels, params
+
+
+def _tokens(text: str) -> list[str]:
+    """Lowercased alphanumeric tokens — the single tokenizer for the D4 gate."""
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
+def label_restates_topic(label: str, topic: str, threshold: float = 0.70) -> bool:
+    """True when ``threshold`` or more of the label's tokens appear in the topic (D4).
+
+    Overlap is measured on the *label* side: the question is how much of the
+    label is just the topic repeated back. An empty label or an empty topic
+    overlaps nothing — the separate two-token rule rejects empty labels in
+    :func:`name_clusters`.
+    """
+    label_tokens = set(_tokens(label))
+    if not label_tokens:
+        return False
+    topic_tokens = set(_tokens(topic))
+    if not topic_tokens:
+        return False
+    return len(label_tokens & topic_tokens) / len(label_tokens) >= threshold
+
+
+def _top_distinctive_term(
+    member_titles: list[str],
+    corpus_titles: list[str],
+    *,
+    exclude: set[str],
+) -> str | None:
+    """Highest mean-tf-idf unigram of ``member_titles`` under the corpus idf.
+
+    tf-idf ranks what is distinctive about this cluster *relative to the whole
+    corpus* (scikit-learn is already a dependency), and ``exclude`` strips the
+    topic's own words so the replacement cannot restate the topic either.
+    """
+    members = [t for t in member_titles if t and t.strip()]
+    corpus = [t for t in corpus_titles if t and t.strip()]
+    if not members or not corpus:
+        return None
+
+    from sklearn.feature_extraction.text import TfidfVectorizer
+
+    try:
+        vectorizer = TfidfVectorizer(stop_words="english")
+        vectorizer.fit(corpus)
+        member_matrix = vectorizer.transform(members)
+    except ValueError:  # empty vocabulary — every token was a stopword
+        return None
+    scores = np.asarray(member_matrix.mean(axis=0)).ravel()
+    vocabulary = vectorizer.get_feature_names_out()
+    for index in sorted(range(len(scores)), key=lambda i: (-float(scores[i]), i)):
+        term = str(vocabulary[index])
+        if scores[index] > 0 and term not in exclude:
+            return term
+    return None
+
+
+def _distinguishing_terms(
+    member_titles: list[str],
+    corpus_titles: list[str],
+    *,
+    exclude: set[str],
+    limit: int = 3,
+) -> list[str]:
+    """Raw-frequency terms occurring more inside the cluster than outside it.
+
+    Last resort when tf-idf cannot be fitted at all (e.g. every title is
+    stopwords): only used to decorate the ``Area {n}`` fallback label.
+    """
+    if not member_titles:
+        return []
+    inside = Counter(
+        token for title in member_titles for token in _tokens(title) if len(token) >= 3
+    )
+    if not inside:
+        return []
+    outside = Counter(token for title in corpus_titles for token in _tokens(title)) - Counter(
+        token for title in member_titles for token in _tokens(title)
+    )
+    ranked = sorted(inside, key=lambda t: (-inside[t], t))
+    return [t for t in ranked if t not in exclude and inside[t] > outside.get(t, 0)][:limit]
+
+
+def _fallback_label(
+    local_label: int,
+    member_titles: list[str],
+    corpus_titles: list[str],
+    *,
+    exclude: set[str],
+) -> str:
+    """B.4 fallback ladder: tf-idf term, then ``Area {n}`` with terms, then bare.
+
+    Rung 1 is what a gate-rejected model label becomes; rungs 2 and 3 are the
+    total-failure path. Fallback labels are deterministic and are never
+    re-gated — the two-token rule exists to police *model* output, and a bare
+    tf-idf term is by construction a single token.
+    """
+    term = _top_distinctive_term(member_titles, corpus_titles, exclude=exclude)
+    if term is not None:
+        return term
+    terms = _distinguishing_terms(member_titles, corpus_titles, exclude=exclude)
+    if terms:
+        return f"Area {local_label} ({', '.join(terms)})"
+    return f"Area {local_label}"
+
+
+#: Default description when the model supplied none (or nothing at all):
+#: honest about how the cluster was named, never inventing prose.
+FALLBACK_DESCRIPTION = "Grouped by shared research direction."
+
+
+def name_clusters(
+    clusters: list[dict],
+    papers: list[Paper],
+    settings: Settings,
+    *,
+    completer: JSONCompleter | None = None,
+) -> list[dict]:
+    """Name every real cluster (B.4); ``-1`` is never named.
+
+    Each cluster dict must carry ``local_label``, ``paper_ids`` (drives both
+    the exemplar titles and the tf-idf fallback) and ``topic`` — the layout
+    stage seeds ``topic`` from the landscape, because the anti-restatement
+    gate compares every model label against it. A missing topic degrades the
+    gate to the length rule only, and says so in the log.
+
+    Returned dicts are ``{"local_label", "label", "description"}``, one per
+    real cluster, sorted by label. Every failure path lands somewhere visible:
+    a rejected or absent model label becomes the cluster's top tf-idf term,
+    and if that cannot be computed either, ``Area {n}``.
+    """
+    real = [
+        c for c in clusters if int(c.get("local_label", UNCLUSTERED_LABEL)) != UNCLUSTERED_LABEL
+    ]
+    if not real:
+        return []
+
+    topic = next(
+        (str(c.get("topic") or "").strip() for c in real if str(c.get("topic") or "").strip()),
+        "",
+    )
+    if not topic:
+        logger.warning(
+            "Cluster dicts carry no topic; the anti-restatement gate can only apply "
+            "the two-token rule"
+        )
+
+    titles_by_paper = {paper.paper_id: paper.title for paper in papers}
+    corpus_titles = [paper.title for paper in papers]
+    member_titles: dict[int, list[str]] = {}
+    exemplar_titles: dict[int, list[str]] = {}
+    for cluster_ in real:
+        local = int(cluster_["local_label"])
+        ids = [str(pid) for pid in cluster_.get("paper_ids", [])]
+        titles = [titles_by_paper[pid] for pid in ids if pid in titles_by_paper]
+        member_titles[local] = titles
+        exemplar_titles[local] = titles
+
+    proposed: dict[int, ClusterLabel] = {}
+    if completer is None:
+        logger.warning(
+            "No LLM client available; naming %d cluster(s) by tf-idf fallback", len(real)
+        )
+    else:
+        try:
+            response = completer.complete_json(
+                system=CLUSTER_LABEL_SYSTEM_PROMPT,
+                user=build_cluster_naming_prompt(topic, real, exemplar_titles),
+                schema=ClusterNaming,
+                stage="cluster-naming",
+                temperature=0.0,
+            )
+        except Exception as exc:  # naming must never sink the stage
+            logger.warning("Cluster naming call failed: %s", exc)
+            response = None
+        if isinstance(response, ClusterNaming):
+            known = {int(c["local_label"]) for c in real}
+            proposed = {
+                entry.local_label: entry
+                for entry in response.labels
+                if entry.local_label in known
+            }
+        elif response is not None:
+            logger.warning(
+                "Cluster naming returned %s, not a ClusterNaming envelope; ignoring it",
+                type(response).__name__,
+            )
+
+    named: list[dict] = []
+    for cluster_ in sorted(real, key=lambda c: int(c["local_label"])):
+        local = int(cluster_["local_label"])
+        entry = proposed.get(local)
+        label = (
+            " ".join(entry.label.split())[:80]
+            if entry is not None and entry.label.strip()
+            else ""
+        )
+        description = (
+            " ".join(entry.description.split())
+            if entry is not None and entry.description.strip()
+            else ""
+        )
+        rejected = not label or len(_tokens(label)) <= 2 or label_restates_topic(label, topic)
+        if rejected:
+            if label:
+                logger.warning(
+                    "Cluster %d label %r rejected (restates topic or <=2 tokens); "
+                    "replacing it with the top tf-idf term",
+                    local,
+                    label,
+                )
+            label = _fallback_label(
+                local,
+                member_titles.get(local, []),
+                corpus_titles,
+                exclude=set(_tokens(topic)),
+            )
+        named.append(
+            {
+                "local_label": local,
+                "label": label,
+                "description": description or FALLBACK_DESCRIPTION,
+            }
+        )
+    return named
+
+
 __all__ = [
     "CLUSTER_COLORS",
     "MIN_FOR_UMAP",
     "UNCLUSTERED_COLOR",
     "Layout",
+    "apply_frame_alignment",
     "circle_positions",
+    "cluster",
     "cluster_centroids",
     "cluster_labels",
     "color_for_label",
     "count_clusters",
+    "fit_frame_alignment",
     "group_labels",
+    "label_restates_topic",
     "layout",
     "match_labels_by_centroid",
     "min_cluster_size",
+    "name_clusters",
     "normalize_coords",
     "project",
 ]

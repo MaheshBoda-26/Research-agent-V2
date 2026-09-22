@@ -16,6 +16,7 @@ from pipeline.cluster import (
     MIN_FOR_UMAP,
     UNCLUSTERED_COLOR,
     circle_positions,
+    cluster,
     cluster_centroids,
     cluster_labels,
     color_for_label,
@@ -37,11 +38,18 @@ class FakeReducer:
         return np.stack([matrix[:, 0], matrix[:, 1]], axis=1)
 
 
-def blobs(sizes=(12, 12, 12), spread: float = 0.25) -> np.ndarray:
-    """Well-separated 2D clusters, deterministic."""
+def blobs(sizes=(12, 12, 12), spread: float = 0.4) -> np.ndarray:
+    """Three directionally distinct clusters, deterministic.
+
+    Centers sit 120° apart on a circle of radius 10 so they stay separable
+    under UMAP's cosine metric — clusters along one ray (e.g. (0,0), (9,9),
+    (18,18)) are nearly identical by cosine and collapse into one.
+    """
     rng = np.random.default_rng(7)
+    angles = np.array([0.0, 2 * np.pi / 3, 4 * np.pi / 3])
+    centers = 10.0 * np.stack([np.cos(angles), np.sin(angles)], axis=1)
     parts = [
-        rng.normal(loc=index * 9.0, scale=spread, size=(count, 2))
+        rng.normal(loc=centers[index], scale=spread, size=(count, 2))
         for index, count in enumerate(sizes)
     ]
     return np.vstack(parts).astype(np.float32)
@@ -91,6 +99,15 @@ def test_min_cluster_size_scales_with_corpus(settings: Settings):
     assert min_cluster_size(19, settings) == 4
     assert min_cluster_size(100, settings) == 6
     assert min_cluster_size(1000, settings) == 60
+
+
+def test_cluster_reports_the_parameters_it_used(settings: Settings):
+    """A.9 contract: labels plus the parameters that produced them, for the log."""
+    labels, params = cluster(blobs(), settings)
+    assert labels.shape == (36,)
+    assert params["min_cluster_size"] == 4  # max(4, ceil(0.06 * 36)) — 0.06*36 = 2.16 -> 4
+    assert params["min_samples"] == 2
+    assert params["clustered_on"] == "2d_projection"
 
 
 def test_disjoint_blobs_become_disjoint_clusters(settings: Settings):
@@ -171,5 +188,3 @@ def test_unclustered_bucket_gets_the_muted_colour():
     assert color_for_label(-1) == UNCLUSTERED_COLOR
     assert color_for_label(0) != UNCLUSTERED_COLOR
     assert color_for_label(12) == color_for_label(0)  # palette wraps
-
-    return np.vstack(parts).astype(np.float32)

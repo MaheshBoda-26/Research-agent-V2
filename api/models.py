@@ -270,6 +270,17 @@ class ClusterLabel(StrictModel):
     description: str
 
 
+class ClusterNaming(StrictModel):
+    """B.4 — the naming envelope: one call labels every real cluster.
+
+    {"labels": [...]} rather than V1's one-call-per-cluster shape, so the whole
+    naming stage is a single LLM call whose token budget is bounded by the
+    cluster count.
+    """
+
+    labels: list[ClusterLabel]
+
+
 class TypedEdge(StrictModel):
     """B.5 — a relationship classification for a SUPPLIED pair of papers."""
 
