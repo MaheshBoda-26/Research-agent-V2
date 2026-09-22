@@ -40,7 +40,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from config import PROJECT_ROOT, Settings, load_settings
+from config import Settings
 from models import UNCLUSTERED_LABEL, Paper, PaperExtraction, utcnow
 
 SCHEMA_VERSION: int = 2
@@ -208,7 +208,6 @@ CREATE TABLE IF NOT EXISTS runs (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_runs_landscape ON runs(landscape_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_runs_run_id ON runs(run_id, created_at);
 
 CREATE TABLE IF NOT EXISTS citations (      -- raw links, so edges are recomputable for free
   src_paper_id TEXT NOT NULL REFERENCES papers(paper_id) ON DELETE CASCADE,
@@ -297,6 +296,10 @@ def migrate(conn: sqlite3.Connection) -> None:
             continue
         if column not in existing:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {column_type}")
+    # Indexes that reference additive columns cannot live in SCHEMA: on a
+    # database created before the column existed, CREATE INDEX would fail
+    # before the ALTER above had a chance to run.
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_runs_run_id ON runs(run_id, created_at)")
     conn.execute(
         "INSERT INTO schema_meta (id, version, applied_at) VALUES (1, ?, ?) "
         "ON CONFLICT(id) DO UPDATE SET version = excluded.version, applied_at = excluded.applied_at",
@@ -388,7 +391,7 @@ def upsert_topic(conn: sqlite3.Connection, query_text: str) -> int:
         "INSERT INTO topics (query_text, created_at) VALUES (?, ?)",
         (normalized, utcnow()),
     )
-    return int(cur.lastrowid)
+    return int(cur.lastrowid or 0)
 
 
 def fetch_topic(conn: sqlite3.Connection, topic_id: int) -> dict[str, Any] | None:
@@ -525,7 +528,7 @@ def insert_landscape(
         """,
         (topic_id, title, _json_dump(params or {}), now, now),
     )
-    return int(cur.lastrowid)
+    return int(cur.lastrowid or 0)
 
 
 def fetch_landscape(conn: sqlite3.Connection, landscape_id: int) -> dict[str, Any] | None:
@@ -1102,7 +1105,7 @@ def insert_run(conn: sqlite3.Connection, event: dict[str, Any]) -> None:
 
 def fetch_runs(conn: sqlite3.Connection, landscape_id: int) -> list[dict[str, Any]]:
     rows = conn.execute(
-        "SELECT * FROM runs WHERE landscape_id = ? ORDER BY created_at ASC, id ASC",
+        "SELECT * FROM runs WHERE landscape_id = ? ORDER BY created_at ASC, rowid ASC",
         (landscape_id,),
     )
     out: list[dict[str, Any]] = []
@@ -1172,7 +1175,7 @@ def prune(conn: sqlite3.Connection, *, older_than_days: int) -> dict[str, int]:
     Phase 8) owns the follow-up VACUUM, which cannot run inside a transaction.
     """
     cutoff = _iso_days_ago(older_than_days)
-    expired = conn.execute("DELETE FROM source_cache WHERE expires_at < ?", (utcnow(),)).rowcount
+    expired = conn.execute("DELETE FROM source_cache WHERE expires_at <= ?", (utcnow(),)).rowcount
     old_runs = conn.execute("DELETE FROM runs WHERE created_at < ?", (cutoff,)).rowcount
     return {"source_cache": int(expired), "runs": int(old_runs)}
 

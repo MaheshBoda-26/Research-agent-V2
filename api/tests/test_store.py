@@ -12,11 +12,12 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from conftest import make_paper
+
 import store
 from models import PaperExtraction
 from store import StoreError
 
-from conftest import make_paper
 
 def _seed_landscape(conn: sqlite3.Connection, paper_count: int = 3) -> int:
     """A topic, a landscape, and paper_count linked papers. Returns landscape id."""
@@ -49,7 +50,8 @@ def test_topic_upsert_is_case_and_whitespace_insensitive(conn) -> None:
     first = store.upsert_topic(conn, "Retrieval-Augmented  Generation")
     second = store.upsert_topic(conn, " retrieval-augmented generation ")
     assert first == second
-    assert store.fetch_topic(conn, first)["query_text"] == "Retrieval-Augmented Generation"
+    row = store.fetch_topic(conn, first)
+    assert row is not None and row["query_text"] == "Retrieval-Augmented Generation"
 
 
 def test_paper_upsert_round_trip_and_preserves_enrichment(conn) -> None:
@@ -282,7 +284,10 @@ def test_citations_replace_and_fetch(conn) -> None:
     store.replace_citations(conn, "a", [("a", "c")], "semanticscholar")
     triples = store.fetch_citations(conn, ["a"])
     assert ("a", "b", "semanticscholar") not in triples
-    assert ("b", "c", "openalex") in triples  # other source untouched
+    assert ("a", "c", "semanticscholar") in triples
+    # other papers' rows and other sources are untouched by a narrow replace
+    assert ("b", "c", "openalex") not in triples
+    assert ("b", "c", "openalex") in store.fetch_citations(conn, ["b"])
 
 
 def test_source_cache_respects_ttl(conn) -> None:
@@ -515,5 +520,6 @@ def test_session_commits_on_success(settings) -> None:
     with store.session(settings) as conn:
         topic_id = store.upsert_topic(conn, "committed topic")
     with store.session(settings) as conn:
-        assert store.fetch_topic(conn, topic_id)["query_text"] == "committed topic"
+        row = store.fetch_topic(conn, topic_id)
+        assert row is not None and row["query_text"] == "committed topic"
 
