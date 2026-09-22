@@ -1,0 +1,32 @@
+# Secrets — never commit a real key. .env.example documents how to obtain each.
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local data: sqlite databases, caches, model weights (HF_HOME lives here)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Node / Next.js (web/ arrives in Phase 9)
+node_modules/
+.next/
+out/
+
+# Eval reports are generated artefacts; gold sets are committed
+evals/reports/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
