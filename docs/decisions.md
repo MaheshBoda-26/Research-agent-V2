@@ -21,3 +21,19 @@ Newest first.
 - Consequence: all LLM calls use `extra_body={"nvext": {"guided_json": …}}`
   (V1-proven path) with schema validation + bounded repair as backstop; the
   `response_format` capability-discovery fallback remains for other providers.
+  `response_format` capability-discovery fallback remains for other providers.
+
+## Cross-encoder API (Phase 4, Task 4.0) — recorded 2026-09-22
+
+`pip freeze` pins `sentence-transformers==3.3.1`. `inspect.signature` on the
+installed distribution prints:
+
+- `CrossEncoder.__init__(self, model_name: str, num_labels: int = None, max_length: int = None, device: str | None = None, ...)`
+- `CrossEncoder.predict(self, sentences, batch_size: int = 32, show_progress_bar: bool | None = None, ...)`
+- `CrossEncoder.rank(self, query: str, documents: list[str], top_k: int | None = None, batch_size: int = 32, ...)`
+
+**Consequence:** the installed 3.3.1 API still spells the truncation length
+`max_length` — the v6 rename to `max_seq_length` has *not* landed in our pin.
+`CrossEncoderReranker` therefore passes `max_length=` and, if the pin is ever
+bumped, that kwarg is the thing to update (§2.5).
+
