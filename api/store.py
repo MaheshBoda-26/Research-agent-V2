@@ -1186,3 +1186,11 @@ def default_settings() -> Settings:
     settings.ensure_dirs()
     return settings
 
+
+
+# --------------------------------------------------------------------------- #
+# Source cache — TTL store for third-party metadata (Task 3.1)
+# --------------------------------------------------------------------------- #
+# get_cached/put_cached live with the other persistence helpers above
+# (Task 3.1); this marker keeps the section findable.
+
