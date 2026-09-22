@@ -21,7 +21,6 @@ Newest first.
 - Consequence: all LLM calls use `extra_body={"nvext": {"guided_json": …}}`
   (V1-proven path) with schema validation + bounded repair as backstop; the
   `response_format` capability-discovery fallback remains for other providers.
-  `response_format` capability-discovery fallback remains for other providers.
 
 ## Cross-encoder API (Phase 4, Task 4.0) — recorded 2026-09-22
 
