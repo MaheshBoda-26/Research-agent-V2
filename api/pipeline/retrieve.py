@@ -1,12 +1,16 @@
-"""Third-party data sources (arXiv, Semantic Scholar, OpenAlex, full text).
+"""Stage 1 — retrieval (wiring).
 
-Every source here is best-effort at the pipeline level: the arXiv source raises
-typed errors where the plan demands them (A.5), but the pipeline stages that
-consume the sources degrade instead of failing (Phase 3+).
+The implementation lives in :mod:`sources.arxiv_client` (plan A.5) so the
+transport, cache, and query-tier logic are importable without the pipeline
+package. This module is the stage-shaped façade: the orchestrator (Phase 8)
+imports ``fetch_candidates`` from here and wraps it in ``asyncio.to_thread``.
 """
+
+from __future__ import annotations
 
 from sources.arxiv_client import (
     ProgressCallback,
+    QueryResolver,
     RetrievalError,
     RetrievalOffline,
     RetrievalThrottled,
@@ -26,6 +30,7 @@ from sources.arxiv_client import (
 
 __all__ = [
     "ProgressCallback",
+    "QueryResolver",
     "RetrievalError",
     "RetrievalOffline",
     "RetrievalThrottled",
