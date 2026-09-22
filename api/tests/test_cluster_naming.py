@@ -9,8 +9,9 @@ these tests are offline and exact.
 
 from __future__ import annotations
 
-from config import Settings
 from conftest import make_paper
+
+from config import Settings
 from models import ClusterLabel, ClusterNaming, Paper
 from pipeline.cluster import label_restates_topic, name_clusters
 from prompts.cluster import CLUSTER_LABEL_SYSTEM_PROMPT, build_cluster_naming_prompt

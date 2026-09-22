@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
+from conftest import make_paper
 
 import store
 from config import Settings
-from conftest import make_paper
 from pipeline.embed import (
     check_embedding_dims,
     embed_papers,

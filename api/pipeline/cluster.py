@@ -127,8 +127,7 @@ def cluster_labels(
         return np.full((count,), UNCLUSTERED_LABEL, dtype=int)
 
     if clusterer is not None:
-        labels = np.asarray(clusterer.fit_predict(coords)).ravel()
-        return labels.astype(int)
+        return np.asarray(clusterer.fit_predict(coords)).ravel().astype(int)
 
     import hdbscan
 
