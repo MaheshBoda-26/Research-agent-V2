@@ -220,7 +220,7 @@ class LLMClient:
         on_call: Any | None = None,
     ) -> None:
         self.settings = settings
-        self.on_call = on_call
+        self.on_call: Any = on_call
         self.structured_disabled = False  # set when the provider rejects response_format
         if client is not None:
             self._client = client
@@ -351,6 +351,13 @@ class LLMClient:
                     self.failures += 1
                     return None
                 logger.info("Repairing response (attempt %d): %s", repair_index + 1, _brief(exc))
+                self._record(
+                    stage=stage, run_id=run_id, attempt=attempt, repair=repair_index,
+                    model=self.settings.llm_model, provider=self.settings.llm_provider,
+                    ok=False, error=f"validation: {_brief(exc)}",
+                    prompt_tokens=usage[0], completion_tokens=usage[1],
+                    cost_usd=_cost_usd(self.settings.llm_model, *usage),
+                )
                 messages.append({"role": "assistant", "content": raw or ""})
                 messages.append(
                     {
@@ -482,11 +489,11 @@ class NullCompleter:
         run_id: str = "",
         attempt: int = 1,
         **kwargs: object,
-    ) -> None:
+    ) -> BaseModel | None:
         self.failures += 1
         return None
 
-    def complete_text(self, *, system: str, user: str) -> None:
+    def complete_text(self, *, system: str, user: str) -> str | None:
         self.failures += 1
         return None
 

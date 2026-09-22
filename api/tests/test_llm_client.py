@@ -75,7 +75,6 @@ def _client(transport: _FakeTransport, provider: str = "nim", **kw: Any) -> LLMC
     settings = replace(Settings(), llm_provider=provider, llm_model="test-model")
     recorder = _Recorder()
     client = LLMClient(settings, client=transport, on_call=recorder, **kw)
-    client._recorder = recorder  # type: ignore[attr-defined]  # surfaced for assertions
     return client
 
 
@@ -117,12 +116,12 @@ def test_repair_loop_second_attempt_validates() -> None:
     # The repair message chain contains the validation error.
     assert "did not match" in transport.requests[1]["messages"][-1]["content"]
     # Two llm_calls rows: first a failure, then a success.
-    assert len(client._recorder.calls) == 2
-    assert client._recorder.calls[0]["ok"] is False
-    assert client._recorder.calls[1]["ok"] is True
-    assert client._recorder.calls[1]["stage"] == "extract"
-    assert client._recorder.calls[1]["run_id"] == "r1"
-    assert client._recorder.calls[1]["prompt_tokens"] == 10
+    assert len(client.on_call.calls) == 2
+    assert client.on_call.calls[0]["ok"] is False
+    assert client.on_call.calls[1]["ok"] is True
+    assert client.on_call.calls[1]["stage"] == "extract"
+    assert client.on_call.calls[1]["run_id"] == "r1"
+    assert client.on_call.calls[1]["prompt_tokens"] == 10
 
 
 def test_repair_loop_exhausted_returns_none_and_records() -> None:
@@ -131,7 +130,7 @@ def test_repair_loop_exhausted_returns_none_and_records() -> None:
     out = client.complete_json(system="s", user="u", schema=_Out, stage="test")
     assert out is None
     assert client.failures == 1
-    recorded = client._recorder.calls[-1]
+    recorded = client.on_call.calls[-1]
     assert recorded["ok"] is False
     assert recorded["error"].startswith("validation:")
 
@@ -140,7 +139,7 @@ def test_refusal_returns_none_with_reason() -> None:
     transport = _FakeTransport([_response("I'm sorry, but I cannot assist with that.")])
     client = _client(transport)
     assert client.complete_json(system="s", user="u", schema=_Out, stage="test") is None
-    assert client._recorder.calls[-1]["error"] == "refusal"
+    assert client.on_call.calls[-1]["error"] == "refusal"
 
 
 def test_retryable_status_is_retried_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -159,7 +158,7 @@ def test_fatal_status_returns_none_without_retries() -> None:
     client = _client(transport)
     assert client.complete_json(system="s", user="u", schema=_Out, stage="test") is None
     assert len(transport.requests) == 1
-    assert client._recorder.calls[-1]["error"].startswith("HTTP 401")
+    assert client.on_call.calls[-1]["error"].startswith("HTTP 401")
 
 
 def test_retries_exhausted_returns_none(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -173,7 +172,7 @@ def test_retries_exhausted_returns_none(monkeypatch: pytest.MonkeyPatch) -> None
 def test_structured_format_fallback_on_rejection() -> None:
     # openai provider sends response_format; a 400 naming it must disable it
     # for the process and succeed via prompt+parse on the retry.
-    transport = _FakeTransport([_ScriptedError(400), _response(GOOD_JSON)])
+    transport = _FakeTransport([_ScriptedError(400, "response_format not supported"), _response(GOOD_JSON)])
     client = _client(transport, provider="openai")
     out = client.complete_json(system="s", user="u", schema=_Out, stage="test")
     assert out == _Out(name="alpha", count=3)
@@ -201,7 +200,7 @@ def test_usage_and_cost_totals_accumulate() -> None:
     assert client.total_prompt_tokens == 1_000_000
     assert client.total_completion_tokens == 1_000_000
     assert client.total_cost_usd >= 0.0
-    assert client._recorder.calls[-1]["ok"] is True
+    assert client.on_call.calls[-1]["ok"] is True
 
 
 def test_complete_text_success_and_refusal() -> None:
