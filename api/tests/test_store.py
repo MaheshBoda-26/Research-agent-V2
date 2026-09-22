@@ -17,3 +17,249 @@ from models import PaperExtraction
 from store import StoreError
 
 from conftest import make_paper
+
+def _seed_landscape(conn: sqlite3.Connection, paper_count: int = 3) -> int:
+    """A topic, a landscape, and paper_count linked papers. Returns landscape id."""
+    papers = [make_paper(f"2107.000{i}") for i in range(paper_count)]
+    store.upsert_papers(conn, papers)
+    topic_id = store.upsert_topic(conn, "retrieval-augmented generation")
+    landscape_id = store.insert_landscape(
+        conn, topic_id=topic_id, title="RAG", params={"retrieval_max_results": 200}
+    )
+    for rank, paper in enumerate(papers, start=1):
+        store.link_paper(
+            conn,
+            landscape_id,
+            paper_id=paper.paper_id,
+            rank=rank,
+            relevance_score=10.0 - rank,
+            rerank_source="cross-encoder+citation",
+            is_seed=rank == 1,
+            cross_encoder_logit=float(rank),
+        )
+    return landscape_id
+
+
+# --------------------------------------------------------------------------- #
+# Topics / papers / landscapes CRUD
+# --------------------------------------------------------------------------- #
+
+
+def test_topic_upsert_is_case_and_whitespace_insensitive(conn) -> None:
+    first = store.upsert_topic(conn, "Retrieval-Augmented  Generation")
+    second = store.upsert_topic(conn, " retrieval-augmented generation ")
+    assert first == second
+    assert store.fetch_topic(conn, first)["query_text"] == "Retrieval-Augmented Generation"
+
+
+def test_paper_upsert_round_trip_and_preserves_enrichment(conn) -> None:
+    paper = make_paper("2107.05580", citation_count=128, citation_source="openalex")
+    assert store.upsert_papers(conn, [paper]) == 1
+    assert store.upsert_papers(conn, [paper]) == 0  # already known
+    fetched = store.fetch_paper(conn, "2107.05580")
+    assert fetched is not None
+    assert fetched.title == "Title for 2107.05580"
+    assert fetched.citation_count == 128
+    assert fetched.citation_source == "openalex"
+
+    # A retrieval re-run (no enrichment fields) must not wipe resolved citations.
+    refreshed = make_paper("2107.05580", version="2")
+    store.upsert_papers(conn, [refreshed])
+    after = store.fetch_paper(conn, "2107.05580")
+    assert after is not None
+    assert after.version == "2"
+    assert after.citation_count == 128  # preserved, not wiped to NULL
+
+
+def test_landscape_crud_round_trip(conn) -> None:
+    landscape_id = _seed_landscape(conn)
+    row = store.fetch_landscape(conn, landscape_id)
+    assert row is not None
+    assert row["topic"] == "retrieval-augmented generation"
+    assert row["narrative_status"] == "pending"
+    assert row["status"] == "running"
+
+    store.update_landscape(
+        conn, landscape_id, status="ready", narrative_status="ok",
+        summary="A map.", cost_usd=0.0123, tokens_in=100, tokens_out=50,
+    )
+    row = store.fetch_landscape(conn, landscape_id)
+    assert row is not None
+    assert row["status"] == "ready"
+    assert row["narrative_status"] == "ok"
+    assert row["cost_usd"] == pytest.approx(0.0123)
+    assert row["tokens_in"] == 100 and row["tokens_out"] == 50
+
+    listed = store.list_landscapes(conn)
+    assert [item["id"] for item in listed] == [landscape_id]
+    assert listed[0]["paper_count"] == 3
+
+    assert store.bump_generation(conn, landscape_id) == 2
+    assert store.delete_landscape(conn, landscape_id) is True
+    assert store.delete_landscape(conn, landscape_id) is False
+    assert store.fetch_landscape(conn, landscape_id) is None
+
+
+def test_update_landscape_rejects_unknown_field(conn) -> None:
+    landscape_id = _seed_landscape(conn)
+    with pytest.raises(StoreError, match="unknown fields"):
+        store.update_landscape(conn, landscape_id, no_such_column=1)
+
+
+def test_link_paper_membership_and_fetch(conn) -> None:
+    landscape_id = _seed_landscape(conn)
+    ids = store.landscape_paper_ids(conn, landscape_id)
+    assert ids == {"2107.0000", "2107.0001", "2107.0002"}
+    papers = store.fetch_landscape_papers(conn, landscape_id)
+    assert [p["rank"] for p in papers] == [1, 2, 3]
+    assert papers[0]["is_seed"] is True
+    assert papers[0]["rerank_source"] == "cross-encoder+citation"
+    assert papers[0]["authors"] == ["A. Author"]
+
+    # Re-linking preserves coordinates (expand must not lose the layout).
+    store.update_layout(conn, landscape_id, {"2107.0000": (0.5, -0.25, 7)})
+    store.link_paper(
+        conn, landscape_id, paper_id="2107.0000", rank=1, relevance_score=9.9,
+        rerank_source="cross-encoder+citation",
+    )
+    relinked = store.fetch_landscape_papers(conn, landscape_id)
+    first = next(p for p in relinked if p["paper_id"] == "2107.0000")
+    assert first["x"] == 0.5 and first["y"] == -0.25 and first["cluster_id"] == 7
+    assert first["relevance_score"] == pytest.approx(9.9)
+
+
+
+# --------------------------------------------------------------------------- #
+# Embeddings / extractions
+# --------------------------------------------------------------------------- #
+
+
+def test_embedding_round_trip(conn) -> None:
+    conn = conn  # noqa: PLW0127 - fixture
+    store.upsert_papers(conn, [make_paper("p1"), make_paper("p2")])
+    blob = b"\x01\x02\x03\x04" * 4
+    store.upsert_embedding(conn, "p1", "BAAI/bge-base-en-v1.5", blob, 4)
+    store.upsert_embeddings(conn, "BAAI/bge-base-en-v1.5", {"p2": blob})
+    found = store.fetch_embeddings(conn, ["p1", "p2", "p3"], "BAAI/bge-base-en-v1.5")
+    assert set(found) == {"p1", "p2"}
+    assert found["p1"] == blob
+    assert store.fetch_embeddings(conn, [], "BAAI/bge-base-en-v1.5") == {}
+
+
+def test_extraction_cache_is_keyed_by_prompt_version(conn) -> None:
+    """Task 5.4's store half: writing extract_v2 must not disturb extract_v1."""
+    store.upsert_papers(conn, [make_paper("2107.05580")])
+    v1 = PaperExtraction(problem="old read", novelty="unclear")
+    v2 = PaperExtraction(problem="new read", novelty="substantial")
+    store.upsert_extraction(conn, "2107.05580", "extract_v1", v1, model="m")
+    store.upsert_extraction(conn, "2107.05580", "extract_v2", v2, model="m")
+
+    old = store.fetch_extractions(conn, ["2107.05580"], "extract_v1")
+    assert old["2107.05580"].problem == "old read"
+    new = store.fetch_extractions(conn, ["2107.05580"], "extract_v2")
+    assert new["2107.05580"].problem == "new read"
+    # A bumped prompt deliberately misses the cache.
+    assert store.fetch_extractions(conn, ["2107.05580"], "extract_v3") == {}
+
+
+def test_failed_extraction_round_trip(conn) -> None:
+    """D3: a failed extraction is a first-class row, never a silent absence."""
+    store.upsert_papers(conn, [make_paper("2107.05580")])
+    store.upsert_extraction(
+        conn, "2107.05580", "extract_v2",
+        PaperExtraction(status="failed", error="timeout after 60s"),
+    )
+    fetched = store.fetch_extraction(conn, "2107.05580", "extract_v2")
+    assert fetched is not None
+    assert fetched.status == "failed"
+    assert fetched.error == "timeout after 60s"
+    assert fetched.problem is None
+
+
+# --------------------------------------------------------------------------- #
+# Clusters / graph / synthesis outputs
+# --------------------------------------------------------------------------- #
+
+
+def test_clusters_edges_and_synthesis_outputs_round_trip(conn) -> None:
+    landscape_id = _seed_landscape(conn)
+    store.replace_clusters(
+        conn, landscape_id,
+        [
+            {"local_label": 0, "label": "Dense retrieval", "paper_count": 2, "x": 1.0, "y": 2.0},
+            {"local_label": -1, "label": "", "paper_count": 1},
+        ],
+    )
+    clusters = store.fetch_clusters(conn, landscape_id)
+    assert [c["local_label"] for c in clusters] == [-1, 0]
+    assert clusters[1]["label"] == "Dense retrieval"
+    assert store.cluster_id_by_label(conn, landscape_id) == {-1: clusters[0]["id"], 0: clusters[1]["id"]}
+
+    store.replace_edges(
+        conn, landscape_id,
+        [
+            {"src_paper_id": "2107.0000", "dst_paper_id": "2107.0001", "kind": "extends",
+             "weight": 0.9, "source": "citation", "confidence": 1.0},
+            {"src_paper_id": "2107.0001", "dst_paper_id": "2107.0002", "kind": "applies",
+             "source": "knn", "confidence": 0.71},
+        ],
+    )
+    edges = store.fetch_edges(conn, landscape_id)
+    assert len(edges) == 2
+    assert edges[0]["source"] == "citation" and edges[0]["confidence"] == 1.0
+    assert edges[1]["source"] == "knn"
+
+    store.replace_tensions(
+        conn, landscape_id,
+        [{"statement": "A claims X; B claims not-X", "paper_a_id": "2107.0000", "paper_b_id": "2107.0001"}],
+    )
+    assert store.fetch_tensions(conn, landscape_id)[0]["paper_b_id"] == "2107.0001"
+
+    store.replace_open_problems(
+        conn, landscape_id,
+        [{"statement": "Multi-hop remains open", "why_open": "nobody benchmarks it",
+          "supporting_paper_ids": ["2107.0000"]}],
+    )
+    problems = store.fetch_open_problems(conn, landscape_id)
+    assert problems[0]["supporting_paper_ids"] == ["2107.0000"]
+
+    store.replace_reading_path(
+        conn, landscape_id,
+        [{"paper_id": "2107.0000", "position": 1, "why": "foundational"},
+         {"paper_id": "2107.0002", "position": 2, "why": "recent"}],
+    )
+    path = store.fetch_reading_path(conn, landscape_id)
+    assert [s["position"] for s in path] == [1, 2]
+    assert path[0]["title"] == "Title for 2107.0000"
+
+    # replace_* are wholesale: writing again replaces, never appends.
+    store.replace_edges(conn, landscape_id, [])
+    assert store.fetch_edges(conn, landscape_id) == []
+
+
+def test_every_output_id_must_reference_a_landscape_paper(conn) -> None:
+    """§11.7 referential integrity, run as a SQL assertion."""
+    landscape_id = _seed_landscape(conn)
+    store.replace_edges(
+        conn, landscape_id,
+        [{"src_paper_id": "2107.0000", "dst_paper_id": "2107.0001", "kind": "extends"}],
+    )
+    store.replace_reading_path(conn, landscape_id, [{"paper_id": "2107.0000", "position": 1}])
+    dangling = conn.execute(
+        """
+        SELECT src_paper_id AS pid FROM edges
+        WHERE landscape_id = ? AND src_paper_id NOT IN
+              (SELECT paper_id FROM landscape_papers WHERE landscape_id = ?)
+        UNION ALL
+        SELECT dst_paper_id FROM edges
+        WHERE landscape_id = ? AND dst_paper_id NOT IN
+              (SELECT paper_id FROM landscape_papers WHERE landscape_id = ?)
+        UNION ALL
+        SELECT paper_id FROM reading_path
+        WHERE landscape_id = ? AND paper_id NOT IN
+              (SELECT paper_id FROM landscape_papers WHERE landscape_id = ?)
+        """,
+        (landscape_id,) * 6,
+    ).fetchall()
+    assert dangling == []
+
