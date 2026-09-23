@@ -115,9 +115,9 @@ class Settings:
     llm_api_key: str = ""  # resolved per provider, never logged
     llm_base_url: str = ""
     llm_model: str = ""  # never a guessed default; verify-llm proves it
-    llm_concurrency: int = 4
-    llm_max_repairs: int = 2
-    llm_timeout_seconds: int = 120
+    llm_concurrency: int = 4  # openai | openrouter | nim | local
+    llm_max_repairs: int = 2  # max JSON repair attempts per call
+    llm_timeout_seconds: int = 120  # per-request HTTP timeout on the LLM
 
     # --- Retrieval (arXiv) ---
     arxiv_delay_seconds: float = 3.0  # __post_init__ refuses anything below 3.0
