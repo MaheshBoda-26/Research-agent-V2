@@ -149,4 +149,69 @@ def summarises_title(title: str, topic: str) -> bool:
         return True
     overlap = len(title_tokens & topic_tokens) / len(title_tokens)
     return overlap >= 0.5
+
+
+# --------------------------------------------------------------------------- #
+# Synthesis orchestrator (B.6, B.7, B.8)
+# --------------------------------------------------------------------------- #
+
+
+def synthesize(
+    clusters: list[dict[str, Any]],
+    papers: list[Paper],
+    extractions: dict[str, PaperExtraction | None],
+    edges: list[dict[str, Any]],
+    topic: str,
+    settings: Settings,
+    *,
+    completer: JSONCompleter | None = None,
+) -> dict[str, Any]:
+    """Run the three-call synthesis, degrading each call independently.
+
+    Returns a dict with ``title``, ``summary``, ``narrative_status``,
+    ``tensions``, ``open_problems``, and ``reading_path`` (plan A.10).
+    """
+    valid_ids = {p.paper_id for p in papers}
+    papers_by_id = {p.paper_id: p for p in papers}
+
+    # Build cluster exemplar titles (for Call A).
+    exemplar_titles: dict[int, list[str]] = {}
+    for cluster in clusters:
+        label = int(cluster.get("local_label", 0))
+        ids = cluster.get("paper_ids", [])
+        exemplar_titles[label] = summarise_exemplar_titles(papers_by_id, ids)
+
+    # --- Call A: narrative prose (title + summary) ---
+    prose_fallback = False
+    title, summary = "", ""
+    if completer is not None:
+        user_a = build_narrative_prompt(topic, clusters, exemplar_titles)
+        try:
+            response = completer.complete_json(
+                system=SYNTHESIS_SYSTEM_PROMPT,
+                user=user_a,
+                schema=Narrative,
+                stage="synthesis-narrative",
+            )
+        except Exception:  # noqa: BLE001
+            response = None
+        if (
+            response is not None
+            and response.title.strip()
+            and response.summary.strip()
+            and not summarises_title(response.title.strip(), topic)
+        ):
+            title, summary = response.title.strip(), response.summary.strip()
+        else:
+            prose_fallback = True
+    else:
+        prose_fallback = True
+
+    if prose_fallback or not title or not summary:
+        title, summary = fallback_narrative(
+            topic,
+            clusters,
+            len(papers),
+            sum(1 for c in clusters if int(c.get("local_label", 0)) == -1),
+        )
     return titles
