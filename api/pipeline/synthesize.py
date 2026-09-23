@@ -21,13 +21,14 @@ fallback, and ``narrative_status`` records which layers used fallbacks.
 from __future__ import annotations
 
 import logging
+import re
+from collections.abc import Sequence
 from typing import Any
 
 from config import Settings
 from llm.protocol import JSONCompleter
 from models import (
     Claims,
-    LandscapeSynthesis,
     Narrative,
     NarrativeStatus,
     Paper,
