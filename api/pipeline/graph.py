@@ -36,7 +36,7 @@ from config import Settings
 from llm.protocol import JSONCompleter
 from models import EdgeKind, Paper, EdgeTyping, TypedEdge
 from prompts.graph import build_edge_typing_prompt, parse_typing_result
-from prompts.graph import EDGE_CONTEXT_CHARS
+from prompts.graph import EDGE_CONTEXT_CHARS, EDGE_TYPING_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -141,7 +141,7 @@ def citation_edges(
                     "rationale": "",
                     "source": "citation",
                     "confidence": 1.0,
-                                        "how": _CITATION_HOW,
+                    "how": _CITATION_HOW,
                     "context": "",
                 }
             )
@@ -208,7 +208,7 @@ def cap_edges_per_node(edges: list[dict[str, Any]], cap: int) -> list[dict[str, 
 
 def edge_density(edges: list[dict[str, Any]], paper_count: int) -> float:
     """Edges per paper — the plan's density metric (>=2.5 over the whole map)."""
-        if paper_count == 0:
+    if paper_count == 0:
         return 0.0
     return len(edges) / paper_count
 
@@ -264,7 +264,7 @@ def enforce_density_floor(
             )
             return merged, threshold
 
-                # Step down, clamped to the floor.
+        # Step down, clamped to the floor.
         threshold = max(round(threshold - 0.05, 2), floor)
 
 
@@ -299,7 +299,7 @@ def _edge_context(
             abstract = abstract[: EDGE_CONTEXT_CHARS - 1] + "\u2026"
         return f"[{pid}] {title}. {abstract}".strip()
 
-        return snippet(edge["src_paper_id"]) + "\n    " + snippet(edge["dst_paper_id"])
+    return snippet(edge["src_paper_id"]) + "\n    " + snippet(edge["dst_paper_id"])
 
 
 def classify_edges(
@@ -331,7 +331,7 @@ def classify_edges(
     valid_list = sorted(valid_ids)
     prompt = build_edge_typing_prompt(topic, candidates, valid_list)
 
-        result: EdgeTyping | None = None
+    result: EdgeTyping | None = None
     try:
         result = completer.complete_json(
             system=EDGE_TYPING_SYSTEM_PROMPT,
@@ -376,7 +376,7 @@ def classify_edges(
 
 def _strip_internal(edges: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Remove internal prompt-only fields (``how``, ``context``) before persistence."""
-        return [
+    return [
         {k: v for k, v in edge.items() if k not in ("how", "context")} for edge in edges
     ]
 
