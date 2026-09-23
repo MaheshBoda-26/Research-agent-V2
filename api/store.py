@@ -1196,3 +1196,38 @@ def default_settings() -> Settings:
 # get_cached/put_cached live with the other persistence helpers above
 # (Task 3.1); this marker keeps the section findable.
 
+
+
+def record_run(
+    conn: sqlite3.Connection,
+    run_id: str,
+    landscape_id: int | None,
+    stage: str,
+    status: str,
+    message: str,
+    degraded: bool,
+    payload: dict[str, Any],
+) -> None:
+    """Record a stage event so a client that reconnects can replay progress.
+
+    This is a convenience wrapper around insert_run that accepts flat params
+    instead of a dict.
+    """
+    conn.execute(
+        """
+        INSERT OR REPLACE INTO runs (id, run_id, landscape_id, stage, status, message,
+                                     degraded, payload_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            uuid.uuid4().hex,
+            run_id,
+            landscape_id,
+            stage,
+            status,
+            message,
+            1 if degraded else 0,
+            _json_dump(payload),
+            utcnow(),
+        ),
+    )

@@ -81,3 +81,22 @@ def make_paper(paper_id: str = "2107.05580", version: str = "1", **overrides: ob
     }
     base.update(overrides)
     return Paper(**base)
+
+
+@pytest.fixture
+def fresh_db(tmp_path: Path) -> Path:
+    """A fresh database file for tests that need their own connection."""
+    db_path = tmp_path / "fresh.db"
+    import store
+    store.init_db(db_path)
+    return db_path
+
+
+@pytest.fixture
+def client(settings: Settings) -> Any:
+    """A FastAPI TestClient pointing at the isolated database."""
+    from fastapi.testclient import TestClient
+    import main
+    # Override the db_path in the app's settings
+    main.app.state.settings = settings  # type: ignore[attr-defined]
+    return TestClient(main.app)
