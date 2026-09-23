@@ -89,7 +89,7 @@ def build_narrative_prompt(
         else:
             lines.append("    exemplar titles: (none)")
 
-        return "\n".join(lines)
+    return "\n".join(lines)
 
 
 # --------------------------------------------------------------------------- #
@@ -152,8 +152,10 @@ def build_claims_prompt(
         ext = extractions.get(paper.paper_id)
         snippet = _extraction_snippet(ext)
         lines.append(f"  [{paper.paper_id}] {paper.title.strip()}")
-                if snippet:
+        if snippet:
             lines.append(f"    {snippet}")
+
+    return "\n".join(lines)
 
 
 # --------------------------------------------------------------------------- #
@@ -224,5 +226,3 @@ __all__ = [
     "build_claims_prompt",
     "build_reading_path_prompt",
 ]
-
-    return "\n".join(lines)
