@@ -95,4 +95,58 @@ def summarise_exemplar_titles(
             titles.append(paper.title.strip())
         if len(titles) >= limit:
             break
+
+
+def validate_ids(
+    items: list[dict[str, Any]],
+    id_fields: Sequence[str],
+    valid_ids: set[str],
+) -> list[dict[str, Any]]:
+    """Drop items that reference an id not in ``valid_ids`` (Task 7.5).
+
+    Scalar id fields: an invalid value drops the item. List-valued fields
+    (``supporting_paper_ids``) are pruned to valid ids; if a non-empty list
+    becomes empty the item is dropped (an emptied tension is removed too).
+    """
+    kept: list[dict[str, Any]] = []
+    for item in items:
+        ok = True
+        cleaned = dict(item)
+        for field in id_fields:
+            val = cleaned.get(field)
+            if isinstance(val, str):
+                if val not in valid_ids:
+                    ok = False
+                    break
+            elif isinstance(val, list):
+                pruned = [v for v in val if v in valid_ids]
+                if not pruned and val:  # non-empty -> empty: drop
+                    ok = False
+                    break
+                cleaned[field] = pruned
+        if ok:
+            kept.append(cleaned)
+    return kept
+
+
+def dense_positions(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Re-number ``position`` densely from 1 (Task 7.6).
+
+    A model returning positions 1, 2, 4, 7 must become 1, 2, 3, 4. Steps are
+    first ordered by their reported position (stable for ties), then renumbered.
+    """
+    ordered = sorted(steps, key=lambda s: s.get("position", 0))
+    for idx, step in enumerate(ordered, start=1):
+        step["position"] = idx
+    return ordered
+
+
+def summarises_title(title: str, topic: str) -> bool:
+    """True if ``title`` simply restates the topic (anti-restitution gate D4)."""
+    title_tokens = set(re.findall(r"[a-z0-9]+", title.lower()))
+    topic_tokens = set(re.findall(r"[a-z0-9]+", topic.lower()))
+    if not title_tokens or not topic_tokens:
+        return True
+    overlap = len(title_tokens & topic_tokens) / len(title_tokens)
+    return overlap >= 0.5
     return titles
