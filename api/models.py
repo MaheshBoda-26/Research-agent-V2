@@ -136,6 +136,7 @@ class RankedPaper(BaseModel):
     citation_prior: float | None = None
     judge_score: float | None = None
     rerank_source: str = "cross-encoder"  # e.g. "cross-encoder+citation+judge"
+    rationale: str = ""
 
 class PaperExtraction(BaseModel):
     """Structured reading of one abstract (or, in v3, of full-text sections).
