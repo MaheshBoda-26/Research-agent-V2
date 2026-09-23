@@ -652,8 +652,10 @@ def fetch_landscape_papers(conn: sqlite3.Connection, landscape_id: int) -> list[
         SELECT lp.rank, lp.relevance_score, lp.cross_encoder_logit, lp.rerank_source,
                lp.rationale, lp.is_seed, lp.cluster_id, lp.x, lp.y, lp.added_at,
                p.paper_id, p.version, p.title, p.abstract, p.authors_json,
-               p.published, p.primary_category, p.categories_json, p.abs_url, p.pdf_url,
-               p.citation_count, p.citation_source
+               p.published, p.updated, p.primary_category, p.categories_json,
+               p.comment, p.journal_ref, p.doi, p.abs_url, p.pdf_url,
+               p.citation_count, p.citation_source, p.openalex_id, p.s2_paper_id,
+               p.fulltext_status
         FROM landscape_papers lp JOIN papers p ON p.paper_id = lp.paper_id
         WHERE lp.landscape_id = ?
         ORDER BY lp.rank ASC, p.paper_id ASC

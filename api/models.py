@@ -357,16 +357,24 @@ class ClusterOut(BaseModel):
 
 class PaperInLandscape(BaseModel):
     paper_id: str
+    version: str = ""
     title: str
     abstract: str
     authors: list[str] = Field(default_factory=list)
     published: str = ""
+    updated: str = ""
     primary_category: str = ""
     categories: list[str] = Field(default_factory=list)
+    comment: str = ""
+    journal_ref: str = ""
+    doi: str = ""
     abs_url: str
     pdf_url: str = ""
     citation_count: int | None = None  # None = unknown, NOT zero
     citation_source: str = ""
+    openalex_id: str = ""
+    s2_paper_id: str = ""
+    fulltext_status: str = "none"
     rank: int
     relevance_score: float
     cross_encoder_logit: float | None = None
