@@ -38,7 +38,7 @@ if str(API_ROOT) not in sys.path:
 from config import ConfigError, load_settings  # noqa: E402
 from models import Paper  # noqa: E402
 
-STAGES = ("extract", "layout")
+STAGES = ("extract", "rerank", "layout")
 
 #: Human-readable progress goes here. In ``--json`` mode this is redirected to
 #: stderr so that stdout carries nothing but parseable JSON.
@@ -169,6 +169,82 @@ def stage_extract(args, settings) -> int:
     )
     llm_calls = _count_llm_calls(settings)
     say(f"[extract] llm_calls={llm_calls}")
+    return 0
+
+
+def stage_rerank(args, settings) -> int:
+    """Run ``--stage rerank``: fetch candidates, score with cross-encoder + citations.
+
+    Prints the scored paper table (or JSON) so the Phase 4 checklist can verify
+    the score distribution is not saturated: ``≥8 distinct values`` and ``max < 10.0``.
+    No LLM judge by default — add ``--llm`` later when the judge is wired.
+    """
+    from pipeline import rerank as rerank_mod
+    from pipeline import retrieve as retrieve_mod
+
+    if not args.topic:
+        print("--stage rerank requires --topic", file=sys.stderr)
+        return 2
+
+    say(f"\n[retrieve] searching arXiv for {args.topic!r}")
+    try:
+        papers = retrieve_mod.fetch_candidates(args.topic, settings, force_refresh=args.refresh)
+    except retrieve_mod.RetrievalOffline as exc:
+        print(f"[retrieve] {exc}", file=sys.stderr)
+        return 1
+    say(f"[retrieve] {len(papers)} unique papers after version dedup")
+    if not papers:
+        print(f"[retrieve] no papers for {args.topic!r}; nothing to rerank", file=sys.stderr)
+        return 1
+
+    say(f"\n[rerank] scoring {len(papers)} candidates (cross-encoder + citation prior)")
+    ranked_all = rerank_mod.rank_papers(args.topic, papers, settings, judge=None)
+    ranked = rerank_mod.select_top(ranked_all, settings.rerank_final_count_capped)
+
+    distinct = len({item.relevance_score for item in ranked})
+    top_score = ranked[0].relevance_score if ranked else 0.0
+    bottom_score = ranked[-1].relevance_score if ranked else 0.0
+    counts: dict[str, int] = {}
+    for item in ranked:
+        counts[item.rerank_source] = counts.get(item.rerank_source, 0) + 1
+
+    payload = {
+        "topic": args.topic,
+        "scored": len(ranked),
+        "distinct_scores": distinct,
+        "top_score": top_score,
+        "bottom_score": bottom_score,
+        "saturated": distinct < 8 or top_score >= 10.0,
+        "rerank_sources": counts,
+        "papers": [
+            {
+                "rank": item.rank,
+                "paper_id": item.paper.paper_id,
+                "title": item.paper.title,
+                "score": item.relevance_score,
+                "source": item.rerank_source,
+                "citation_count": item.paper.citation_count,
+            }
+            for item in ranked
+        ],
+    }
+
+    if args.json:
+        print(json.dumps(payload, indent=2, ensure_ascii=False))
+    else:
+        say(f"  {'rank':>4}  {'score':>5}  {'source':<22}  paper_id  title")
+        for item in ranked[: args.limit]:
+            say(
+                f"  {item.rank:>4}  {item.relevance_score:>5.2f}  "
+                f"{item.rerank_source:<22}  {item.paper.paper_id}  "
+                f"{_truncate(item.paper.title, 60)}"
+            )
+        say(f"\n[rerank] distinct scores: {distinct}; top={top_score:.2f}; bottom={bottom_score:.2f}")
+        say(f"[rerank] sources: {counts}")
+        if distinct < 8 or top_score >= 10.0:
+            say("[rerank] WARNING: score distribution looks saturated — check the checklist")
+        else:
+            say("[rerank] score distribution OK (≥8 distinct, max < 10.0)")
     return 0
 
 
@@ -337,6 +413,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.stage == "extract":
         return stage_extract(args, settings)
+    if args.stage == "rerank":
+        return stage_rerank(args, settings)
     if args.stage == "layout":
         return stage_layout(args, settings)
     return 2
