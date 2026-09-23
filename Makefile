@@ -61,7 +61,9 @@ typecheck: ## mypy (api); tsc --noEmit joins in Phase 9
 
 .PHONY: types
 types: ## Regenerate web/lib/api-types.ts from the OpenAPI schema (Phase 8); fails on drift
-	@if [ -f scripts/generate_types.py ]; then $(PY) scripts/generate_types.py --check; else echo "types: implemented in Phase 8 (Task 8.5)"; fi
+	@mkdir -p web/lib web/tests
+	$(PY) scripts/export_openapi.py
+	@$(PY) scripts/export_openapi.py --check
 
 .PHONY: audit
 audit: ## pip-audit + npm audit (supply-chain gate)

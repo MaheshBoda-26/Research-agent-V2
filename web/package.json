@@ -1,0 +1,23 @@
+{
+  "name": "research-landscape-web",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "types": "python ../scripts/export_openapi.py"
+  },
+  "dependencies": {
+    "next": "15.x",
+    "react": "19.x",
+    "react-dom": "19.x",
+    "@xyflow/react": "12.x",
+    "tailwindcss": "4.x"
+  },
+  "devDependencies": {
+    "typescript": "^5.x",
+    "openapi-typescript": "^7.x"
+  }
+}

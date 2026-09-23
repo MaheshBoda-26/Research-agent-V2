@@ -1,0 +1,1146 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Research Landscape API",
+    "version": "0.2.0"
+  },
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Health Health Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/landscapes": {
+      "get": {
+        "summary": "List Landscapes",
+        "operationId": "list_landscapes_v1_landscapes_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LandscapeSummary"
+                  },
+                  "type": "array",
+                  "title": "Response List Landscapes V1 Landscapes Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/landscapes/{landscape_id}": {
+      "get": {
+        "summary": "Get Landscape",
+        "operationId": "get_landscape_v1_landscapes__landscape_id__get",
+        "parameters": [
+          {
+            "name": "landscape_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Landscape Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LandscapeDetail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Patch Landscape",
+        "operationId": "patch_landscape_v1_landscapes__landscape_id__patch",
+        "parameters": [
+          {
+            "name": "landscape_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Landscape Id"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "running",
+                    "ready",
+                    "failed"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "narrative_status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "pending",
+                    "ok",
+                    "partial",
+                    "fallback",
+                    "failed"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Narrative Status"
+            }
+          },
+          {
+            "name": "summary",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Summary"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Patch Landscape V1 Landscapes  Landscape Id  Patch"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete Landscape Endpoint",
+        "operationId": "delete_landscape_endpoint_v1_landscapes__landscape_id__delete",
+        "parameters": [
+          {
+            "name": "landscape_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Landscape Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Delete Landscape Endpoint V1 Landscapes  Landscape Id  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/landscapes/{landscape_id}/papers/{paper_id}": {
+      "get": {
+        "summary": "Get Paper",
+        "operationId": "get_paper_v1_landscapes__landscape_id__papers__paper_id__get",
+        "parameters": [
+          {
+            "name": "landscape_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Landscape Id"
+            }
+          },
+          {
+            "name": "paper_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Paper Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaperInLandscape"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/landscapes/{landscape_id}/expand": {
+      "post": {
+        "summary": "Expand Landscape",
+        "operationId": "expand_landscape_v1_landscapes__landscape_id__expand_post",
+        "parameters": [
+          {
+            "name": "landscape_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Landscape Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExpandRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "title": "Response Expand Landscape V1 Landscapes  Landscape Id  Expand Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/landscapes/stream": {
+      "post": {
+        "summary": "Stream Landscape",
+        "description": "Stream a landscape build as SSE frames.",
+        "operationId": "stream_landscape_v1_landscapes_stream_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TopicRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/landscapes/{landscape_id}/runs": {
+      "get": {
+        "summary": "List Runs",
+        "description": "Replay the events for one landscape run.",
+        "operationId": "list_runs_v1_landscapes__landscape_id__runs_get",
+        "parameters": [
+          {
+            "name": "landscape_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Landscape Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  },
+                  "title": "Response List Runs V1 Landscapes  Landscape Id  Runs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ClusterOut": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          },
+          "paper_count": {
+            "type": "integer",
+            "title": "Paper Count",
+            "default": 0
+          },
+          "x": {
+            "type": "number",
+            "title": "X",
+            "default": 0.0
+          },
+          "y": {
+            "type": "number",
+            "title": "Y",
+            "default": 0.0
+          },
+          "color": {
+            "type": "string",
+            "title": "Color",
+            "default": "#94a3b8"
+          },
+          "is_unclustered": {
+            "type": "boolean",
+            "title": "Is Unclustered",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label"
+        ],
+        "title": "ClusterOut"
+      },
+      "EdgeOut": {
+        "properties": {
+          "src_paper_id": {
+            "type": "string",
+            "title": "Src Paper Id"
+          },
+          "dst_paper_id": {
+            "type": "string",
+            "title": "Dst Paper Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "extends",
+              "contradicts",
+              "applies",
+              "shares_method"
+            ],
+            "title": "Kind"
+          },
+          "weight": {
+            "type": "number",
+            "title": "Weight"
+          },
+          "rationale": {
+            "type": "string",
+            "title": "Rationale",
+            "default": ""
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "knn",
+              "citation",
+              "llm"
+            ],
+            "title": "Source",
+            "default": "llm"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "src_paper_id",
+          "dst_paper_id",
+          "kind",
+          "weight"
+        ],
+        "title": "EdgeOut"
+      },
+      "ExpandRequest": {
+        "properties": {
+          "max_new_results": {
+            "type": "integer",
+            "maximum": 500.0,
+            "minimum": 1.0,
+            "title": "Max New Results",
+            "default": 100
+          }
+        },
+        "type": "object",
+        "title": "ExpandRequest"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "LandscapeDetail": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "topic": {
+            "type": "string",
+            "title": "Topic"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "ready",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "narrative_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ok",
+              "partial",
+              "fallback",
+              "failed"
+            ],
+            "title": "Narrative Status",
+            "default": "pending"
+          },
+          "generation": {
+            "type": "integer",
+            "title": "Generation"
+          },
+          "cost_usd": {
+            "type": "number",
+            "title": "Cost Usd",
+            "default": 0.0
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          },
+          "clusters": {
+            "items": {
+              "$ref": "#/components/schemas/ClusterOut"
+            },
+            "type": "array",
+            "title": "Clusters"
+          },
+          "papers": {
+            "items": {
+              "$ref": "#/components/schemas/PaperInLandscape"
+            },
+            "type": "array",
+            "title": "Papers"
+          },
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/EdgeOut"
+            },
+            "type": "array",
+            "title": "Edges"
+          },
+          "tensions": {
+            "items": {
+              "$ref": "#/components/schemas/TensionOut"
+            },
+            "type": "array",
+            "title": "Tensions"
+          },
+          "open_problems": {
+            "items": {
+              "$ref": "#/components/schemas/OpenProblemOut"
+            },
+            "type": "array",
+            "title": "Open Problems"
+          },
+          "reading_path": {
+            "items": {
+              "$ref": "#/components/schemas/ReadingStepOut"
+            },
+            "type": "array",
+            "title": "Reading Path"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "topic",
+          "title",
+          "summary",
+          "status",
+          "generation",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LandscapeDetail"
+      },
+      "LandscapeSummary": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "topic": {
+            "type": "string",
+            "title": "Topic"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "default": ""
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "running",
+              "ready",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "narrative_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ok",
+              "partial",
+              "fallback",
+              "failed"
+            ],
+            "title": "Narrative Status",
+            "default": "pending"
+          },
+          "generation": {
+            "type": "integer",
+            "title": "Generation"
+          },
+          "paper_count": {
+            "type": "integer",
+            "title": "Paper Count"
+          },
+          "cluster_count": {
+            "type": "integer",
+            "title": "Cluster Count"
+          },
+          "cost_usd": {
+            "type": "number",
+            "title": "Cost Usd",
+            "default": 0.0
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "topic",
+          "title",
+          "status",
+          "generation",
+          "paper_count",
+          "cluster_count",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "LandscapeSummary"
+      },
+      "OpenProblemOut": {
+        "properties": {
+          "statement": {
+            "type": "string",
+            "title": "Statement"
+          },
+          "why_open": {
+            "type": "string",
+            "title": "Why Open",
+            "default": ""
+          },
+          "supporting_paper_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supporting Paper Ids"
+          }
+        },
+        "type": "object",
+        "required": [
+          "statement"
+        ],
+        "title": "OpenProblemOut"
+      },
+      "PaperExtraction": {
+        "properties": {
+          "problem": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "results": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Results"
+          },
+          "contribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contribution"
+          },
+          "limitations": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Limitations"
+          },
+          "novelty": {
+            "type": "string",
+            "enum": [
+              "incremental",
+              "substantial",
+              "unclear"
+            ],
+            "title": "Novelty",
+            "default": "unclear"
+          },
+          "evidence": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Evidence"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "failed"
+            ],
+            "title": "Status",
+            "default": "ok"
+          },
+          "error": {
+            "type": "string",
+            "title": "Error",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "PaperExtraction",
+        "description": "Structured reading of one abstract (or, in v3, of full-text sections).\n\n``evidence`` must contain a verbatim span of the supplied text for each\npopulated claim field — use ``evidence_violations`` (below) to check; the\nextraction pipeline refuses to store a field whose span is not a verbatim\nsubstring (§12.2 layer 3). A failed extraction is still a first-class row:\n``status='failed'`` with ``error`` saying why, so nothing is silently lost\n(D3)."
+      },
+      "PaperInLandscape": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "title": "Paper Id"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version",
+            "default": ""
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "abstract": {
+            "type": "string",
+            "title": "Abstract"
+          },
+          "authors": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Authors"
+          },
+          "published": {
+            "type": "string",
+            "title": "Published",
+            "default": ""
+          },
+          "updated": {
+            "type": "string",
+            "title": "Updated",
+            "default": ""
+          },
+          "primary_category": {
+            "type": "string",
+            "title": "Primary Category",
+            "default": ""
+          },
+          "categories": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Categories"
+          },
+          "comment": {
+            "type": "string",
+            "title": "Comment",
+            "default": ""
+          },
+          "journal_ref": {
+            "type": "string",
+            "title": "Journal Ref",
+            "default": ""
+          },
+          "doi": {
+            "type": "string",
+            "title": "Doi",
+            "default": ""
+          },
+          "abs_url": {
+            "type": "string",
+            "title": "Abs Url"
+          },
+          "pdf_url": {
+            "type": "string",
+            "title": "Pdf Url",
+            "default": ""
+          },
+          "citation_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Citation Count"
+          },
+          "citation_source": {
+            "type": "string",
+            "title": "Citation Source",
+            "default": ""
+          },
+          "openalex_id": {
+            "type": "string",
+            "title": "Openalex Id",
+            "default": ""
+          },
+          "s2_paper_id": {
+            "type": "string",
+            "title": "S2 Paper Id",
+            "default": ""
+          },
+          "fulltext_status": {
+            "type": "string",
+            "title": "Fulltext Status",
+            "default": "none"
+          },
+          "rank": {
+            "type": "integer",
+            "title": "Rank"
+          },
+          "relevance_score": {
+            "type": "number",
+            "title": "Relevance Score"
+          },
+          "cross_encoder_logit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross Encoder Logit"
+          },
+          "relative_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Relative Score"
+          },
+          "rerank_source": {
+            "type": "string",
+            "title": "Rerank Source"
+          },
+          "cluster_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cluster Id"
+          },
+          "x": {
+            "type": "number",
+            "title": "X",
+            "default": 0.0
+          },
+          "y": {
+            "type": "number",
+            "title": "Y",
+            "default": 0.0
+          },
+          "is_seed": {
+            "type": "boolean",
+            "title": "Is Seed",
+            "default": false
+          },
+          "extraction": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PaperExtraction"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "extraction_status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "failed"
+            ],
+            "title": "Extraction Status",
+            "default": "ok"
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "title",
+          "abstract",
+          "abs_url",
+          "rank",
+          "relevance_score",
+          "rerank_source"
+        ],
+        "title": "PaperInLandscape"
+      },
+      "ReadingStepOut": {
+        "properties": {
+          "paper_id": {
+            "type": "string",
+            "title": "Paper Id"
+          },
+          "position": {
+            "type": "integer",
+            "title": "Position"
+          },
+          "why": {
+            "type": "string",
+            "title": "Why",
+            "default": ""
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "paper_id",
+          "position"
+        ],
+        "title": "ReadingStepOut"
+      },
+      "TensionOut": {
+        "properties": {
+          "statement": {
+            "type": "string",
+            "title": "Statement"
+          },
+          "paper_a_id": {
+            "type": "string",
+            "title": "Paper A Id"
+          },
+          "paper_b_id": {
+            "type": "string",
+            "title": "Paper B Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "statement",
+          "paper_a_id",
+          "paper_b_id"
+        ],
+        "title": "TensionOut"
+      },
+      "TopicRequest": {
+        "properties": {
+          "topic": {
+            "type": "string",
+            "maxLength": 300,
+            "minLength": 2,
+            "title": "Topic"
+          }
+        },
+        "type": "object",
+        "required": [
+          "topic"
+        ],
+        "title": "TopicRequest"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}
