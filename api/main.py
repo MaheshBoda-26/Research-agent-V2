@@ -417,6 +417,61 @@ async def _run_pipeline(topic: str, run_id: str) -> AsyncIterator[Any]:
     }
 
 
+def _record_llm_call_cb(
+    stage: str,
+    run_id: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    cost_usd: float,
+    latency_ms: int,
+    ok: bool,
+    error: str,
+) -> None:
+    """Callback to record LLM calls for cost tracking."""
+    from store import record_run as _rr
+    import uuid
+    from config import Settings, utcnow
+    
+    # Get the current settings
+    try:
+        settings = app.state.settings
+    except AttributeError:
+        settings = Settings.from_env()
+    
+    # Find the landscape_id for this run
+    landscape_id = None
+    try:
+        with session(settings) as conn:
+            # Look up the run to find the landscape
+            rows = conn.execute(
+                "SELECT landscape_id FROM runs WHERE run_id = ? ORDER BY created_at DESC LIMIT 1",
+                (run_id,),
+            ).fetchall()
+            if rows:
+                landscape_id = rows[0][0]
+    except Exception:
+        pass
+    
+    # Insert the LLM call record
+    try:
+        with session(settings) as conn:
+            _rr(conn, str(uuid.uuid4()), landscape_id, stage, 'llm', 
+                'ok' if ok else 'error', error, False, {
+                    'prompt_tokens': prompt_tokens,
+                    'completion_tokens': completion_tokens,
+                    'cost_usd': cost_usd,
+                    'latency_ms': latency_ms,
+                })
+    except Exception as e:
+        logger.warning(f'Failed to record LLM call: {e}')
+
+
+def _create_llm_client() -> LLMClient:
+    """Create an LLM client with cost tracking enabled."""
+    settings = _get_settings()
+    return LLMClient(settings, on_call=_record_llm_call_cb)
+
+
 def _record_run(
     conn: sqlite3.Connection,
     run_id: str,

@@ -449,10 +449,13 @@ class LLMClient:
                         content = response.choices[0].message.content
                     except (AttributeError, IndexError, KeyError) as exc:
                         return None, (0, 0), f"Malformed completion shape: {exc}"
+                    start_time = time.perf_counter()
                     usage = self._usage(response)
+                    latency_ms = int((time.perf_counter() - start_time) * 1000)
+                    cost_usd = _cost_usd(self.settings.llm_model, *usage)
                     self.total_prompt_tokens += usage[0]
                     self.total_completion_tokens += usage[1]
-                    self.total_cost_usd += _cost_usd(self.settings.llm_model, *usage)
+                    self.total_cost_usd += cost_usd
                     return content, usage, None
 
             # Exponential backoff with jitter, so parallel callers do not
@@ -465,6 +468,18 @@ class LLMClient:
             time.sleep(delay)
 
         return None, (0, 0), f"LLM request failed after retries: {last_error}"
+
+
+
+    def _set_context(self, stage: str, run_id: str) -> None:
+        """Set the current stage and run_id for callback tracking."""
+        self._current_stage = stage
+        self._current_run_id = run_id
+
+    def _clear_context(self) -> None:
+        """Clear the current stage and run_id."""
+        self._current_stage = ''
+        self._current_run_id = ''
 
 
 class NullCompleter:
